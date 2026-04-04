@@ -119,7 +119,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://raw.githubusercontent.com/robsoncaldeira/automation_market_intelligence/main/graventum-core/arquitetura/templates/{{ $('Montar Contexto Deploy').first().json.template_key }}.json",
+        "url": "=https://raw.githubusercontent.com/robsoncaldeira/graventum-templates/main/{{ $('Montar Contexto Deploy').first().json.template_key }}.json",
         "options": {}
       },
       "id": "load-template",

@@ -4,14 +4,22 @@
     {
       "parameters": {
         "rule": {
-          "interval": [{ "field": "hours", "hoursInterval": 12 }]
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 12
+            }
+          ]
         }
       },
       "id": "trigger-cron",
       "name": "Cron 2x por Dia",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.1,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
@@ -22,16 +30,31 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            }
           ]
         },
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            { "name": "automation_id", "value": "=eq.{{CLIENT_AUTOMATION_ID}}" },
-            { "name": "status", "value": "=in.(primeiro_contato,aguardando_resposta)" },
-            { "name": "proximo_followup_em", "value": "=lte." }
+            {
+              "name": "automation_id",
+              "value": "=eq.{{CLIENT_AUTOMATION_ID}}"
+            },
+            {
+              "name": "status",
+              "value": "=in.(primeiro_contato,aguardando_resposta)"
+            },
+            {
+              "name": "proximo_followup_em",
+              "value": "=lte."
+            }
           ]
         }
       },
@@ -39,7 +62,10 @@
       "name": "Buscar Leads Pendentes",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [460, 300]
+      "position": [
+        460,
+        300
+      ]
     },
     {
       "parameters": {
@@ -49,7 +75,10 @@
       "name": "Montar Mensagens",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [680, 300]
+      "position": [
+        680,
+        300
+      ]
     },
     {
       "parameters": {
@@ -60,14 +89,23 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{CLIENT_EVOLUTION_API_KEY}}" }
+            {
+              "name": "apikey",
+              "value": "={{CLIENT_EVOLUTION_API_KEY}}"
+            }
           ]
         },
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
-            { "name": "number", "value": "={{ $json.telefone }}" },
-            { "name": "text", "value": "={{ $json.msg }}" }
+            {
+              "name": "number",
+              "value": "={{ $json.telefone }}"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.msg }}"
+            }
           ]
         }
       },
@@ -75,7 +113,10 @@
       "name": "Enviar Follow-up",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 300]
+      "position": [
+        900,
+        300
+      ]
     },
     {
       "parameters": {
@@ -86,9 +127,18 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -99,20 +149,120 @@
       "name": "Atualizar Lead",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1120, 300]
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "id": "log-history",
+      "name": "Registrar Histórico",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://ckjiixentlgitwqoquzm.supabase.co/rest/v1/automation_metrics_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\"automation_id\":\"{{CLIENT_AUTOMATION_ID}}\",\"data\":{\"followups_enviados\":{{ $(\"Montar Mensagens\").all().length }}}}"
+      }
     }
   ],
   "connections": {
-    "Cron 2x por Dia": { "main": [[{ "node": "Buscar Leads Pendentes", "type": "main", "index": 0 }]] },
-    "Buscar Leads Pendentes": { "main": [[{ "node": "Montar Mensagens", "type": "main", "index": 0 }]] },
-    "Montar Mensagens": { "main": [[{ "node": "Enviar Follow-up", "type": "main", "index": 0 }]] },
-    "Enviar Follow-up": { "main": [[{ "node": "Atualizar Lead", "type": "main", "index": 0 }]] }
+    "Cron 2x por Dia": {
+      "main": [
+        [
+          {
+            "node": "Buscar Leads Pendentes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Leads Pendentes": {
+      "main": [
+        [
+          {
+            "node": "Montar Mensagens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar Mensagens": {
+      "main": [
+        [
+          {
+            "node": "Enviar Follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Follow-up": {
+      "main": [
+        [
+          {
+            "node": "Atualizar Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atualizar Lead": {
+      "main": [
+        [
+          {
+            "node": "Registrar Histórico",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "_meta": {
     "template_key": "followup-sequence",
     "description": "Sequência D+0/D+3/D+7 de follow-up via WhatsApp para leads que não responderam. Trabalha em conjunto com qualificacao-leads-wa.",
     "api_keys_required": [],
-    "variables": ["CLIENT_AUTOMATION_ID", "CLIENT_WA_INSTANCE", "CLIENT_EVOLUTION_API_KEY"]
+    "variables": [
+      "CLIENT_AUTOMATION_ID",
+      "CLIENT_WA_INSTANCE",
+      "CLIENT_EVOLUTION_API_KEY"
+    ]
   }
 }

@@ -12,7 +12,10 @@
       "name": "Webhook Lead Recebido",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "webhookId": "lead-{{CLIENT_AUTOMATION_ID}}"
     },
     {
@@ -23,7 +26,10 @@
       "name": "Normalizar Lead",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [460, 300]
+      "position": [
+        460,
+        300
+      ]
     },
     {
       "parameters": {
@@ -34,14 +40,23 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{CLIENT_EVOLUTION_API_KEY}}" }
+            {
+              "name": "apikey",
+              "value": "={{CLIENT_EVOLUTION_API_KEY}}"
+            }
           ]
         },
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
-            { "name": "number", "value": "={{ $json.telefone }}" },
-            { "name": "text", "value": "=Olá {{ $json.nome }}! Recebemos seu contato. Para entendermos melhor como podemos ajudar, me conta: qual é o maior desafio que você enfrenta hoje no seu negócio?" }
+            {
+              "name": "number",
+              "value": "={{ $json.telefone }}"
+            },
+            {
+              "name": "text",
+              "value": "=Olá {{ $json.nome }}! Recebemos seu contato. Para entendermos melhor como podemos ajudar, me conta: qual é o maior desafio que você enfrenta hoje no seu negócio?"
+            }
           ]
         }
       },
@@ -49,7 +64,10 @@
       "name": "Enviar Primeira Mensagem",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [680, 300]
+      "position": [
+        680,
+        300
+      ]
     },
     {
       "parameters": {
@@ -60,10 +78,22 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Prefer", "value": "return=minimal" }
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
           ]
         },
         "sendBody": true,
@@ -74,7 +104,10 @@
       "name": "Salvar Lead no Supabase",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 300]
+      "position": [
+        900,
+        300
+      ]
     },
     {
       "parameters": {
@@ -85,21 +118,115 @@
       "name": "Responder Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1120, 300]
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "id": "log-history",
+      "name": "Registrar Histórico",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        500
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://ckjiixentlgitwqoquzm.supabase.co/rest/v1/automation_metrics_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\"automation_id\":\"{{CLIENT_AUTOMATION_ID}}\",\"data\":{\"leads_captados\":1}}"
+      }
     }
   ],
   "connections": {
-    "Webhook Lead Recebido": { "main": [[{ "node": "Normalizar Lead", "type": "main", "index": 0 }]] },
-    "Normalizar Lead": { "main": [[{ "node": "Enviar Primeira Mensagem", "type": "main", "index": 0 }]] },
-    "Enviar Primeira Mensagem": { "main": [[{ "node": "Salvar Lead no Supabase", "type": "main", "index": 0 }]] },
-    "Salvar Lead no Supabase": { "main": [[{ "node": "Responder Webhook", "type": "main", "index": 0 }]] }
+    "Webhook Lead Recebido": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Lead": {
+      "main": [
+        [
+          {
+            "node": "Enviar Primeira Mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Primeira Mensagem": {
+      "main": [
+        [
+          {
+            "node": "Salvar Lead no Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salvar Lead no Supabase": {
+      "main": [
+        [
+          {
+            "node": "Responder Webhook",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Registrar Histórico",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "_meta": {
     "template_key": "qualificacao-leads-wa",
     "description": "Recebe lead via webhook, envia mensagem de qualificação no WhatsApp e salva no Supabase. Webhook URL: /webhook/lead-{CLIENT_AUTOMATION_ID}",
     "api_keys_required": [],
-    "variables": ["CLIENT_AUTOMATION_ID", "CLIENT_WA_INSTANCE", "CLIENT_EVOLUTION_API_KEY"],
+    "variables": [
+      "CLIENT_AUTOMATION_ID",
+      "CLIENT_WA_INSTANCE",
+      "CLIENT_EVOLUTION_API_KEY"
+    ],
     "nota": "Tabela client_automations_leads precisa existir no Supabase para logging."
   }
 }

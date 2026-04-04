@@ -4,14 +4,22 @@
     {
       "parameters": {
         "rule": {
-          "interval": [{ "field": "hours", "hoursInterval": 24 }]
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
         }
       },
       "id": "trigger-cron",
       "name": "Cron Diário 8h",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.1,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
@@ -22,15 +30,27 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            }
           ]
         },
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            { "name": "id", "value": "=eq.{{CLIENT_AUTOMATION_ID}}" },
-            { "name": "select", "value": "metricas,client_profiles(empresa,whatsapp,api_keys)" }
+            {
+              "name": "id",
+              "value": "=eq.{{CLIENT_AUTOMATION_ID}}"
+            },
+            {
+              "name": "select",
+              "value": "metricas,client_profiles(empresa,whatsapp,api_keys)"
+            }
           ]
         }
       },
@@ -38,7 +58,10 @@
       "name": "Buscar Config Cliente",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [460, 300]
+      "position": [
+        460,
+        300
+      ]
     },
     {
       "parameters": {
@@ -49,7 +72,10 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Authorization", "value": "=Bearer {{ $env.GOOGLE_API_TOKEN }}" }
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GOOGLE_API_TOKEN }}"
+            }
           ]
         }
       },
@@ -57,7 +83,10 @@
       "name": "Buscar Planilha",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [680, 300]
+      "position": [
+        680,
+        300
+      ]
     },
     {
       "parameters": {
@@ -67,7 +96,10 @@
       "name": "Filtrar Próximos Lembretes",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 300]
+      "position": [
+        900,
+        300
+      ]
     },
     {
       "parameters": {
@@ -78,14 +110,23 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{CLIENT_EVOLUTION_API_KEY}}" }
+            {
+              "name": "apikey",
+              "value": "={{CLIENT_EVOLUTION_API_KEY}}"
+            }
           ]
         },
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
-            { "name": "number", "value": "={{ $json.telefone }}" },
-            { "name": "text", "value": "={{ $json.mensagem }}" }
+            {
+              "name": "number",
+              "value": "={{ $json.telefone }}"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.mensagem }}"
+            }
           ]
         }
       },
@@ -93,7 +134,10 @@
       "name": "Enviar WhatsApp",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1120, 300]
+      "position": [
+        1120,
+        300
+      ]
     },
     {
       "parameters": {
@@ -104,9 +148,18 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -117,21 +170,133 @@
       "name": "Atualizar Métricas",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1340, 300]
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "id": "log-history",
+      "name": "Registrar Histórico",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://ckjiixentlgitwqoquzm.supabase.co/rest/v1/automation_metrics_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\"automation_id\":\"{{CLIENT_AUTOMATION_ID}}\",\"data\":{\"lembretes_enviados\":{{ $(\"Filtrar Próximos Lembretes\").all().length }}}}"
+      }
     }
   ],
   "connections": {
-    "Cron Diário 8h": { "main": [[{ "node": "Buscar Config Cliente", "type": "main", "index": 0 }]] },
-    "Buscar Config Cliente": { "main": [[{ "node": "Buscar Planilha", "type": "main", "index": 0 }]] },
-    "Buscar Planilha": { "main": [[{ "node": "Filtrar Próximos Lembretes", "type": "main", "index": 0 }]] },
-    "Filtrar Próximos Lembretes": { "main": [[{ "node": "Enviar WhatsApp", "type": "main", "index": 0 }]] },
-    "Enviar WhatsApp": { "main": [[{ "node": "Atualizar Métricas", "type": "main", "index": 0 }]] }
+    "Cron Diário 8h": {
+      "main": [
+        [
+          {
+            "node": "Buscar Config Cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Config Cliente": {
+      "main": [
+        [
+          {
+            "node": "Buscar Planilha",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Planilha": {
+      "main": [
+        [
+          {
+            "node": "Filtrar Próximos Lembretes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar Próximos Lembretes": {
+      "main": [
+        [
+          {
+            "node": "Enviar WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Atualizar Métricas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atualizar Métricas": {
+      "main": [
+        [
+          {
+            "node": "Registrar Histórico",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "_meta": {
     "template_key": "lembrete-whatsapp",
     "description": "Lembretes automáticos via WhatsApp a partir de Google Sheet. Colunas: nome, telefone, data_hora, tipo, mensagem.",
-    "api_keys_required": ["google_sheet_id"],
-    "variables": ["CLIENT_AUTOMATION_ID", "CLIENT_WA_INSTANCE", "CLIENT_EVOLUTION_API_KEY"]
+    "api_keys_required": [
+      "google_sheet_id"
+    ],
+    "variables": [
+      "CLIENT_AUTOMATION_ID",
+      "CLIENT_WA_INSTANCE",
+      "CLIENT_EVOLUTION_API_KEY"
+    ]
   }
 }

@@ -1,0 +1,271 @@
+{
+  "name": "DEPLOY_01 — Deploy Automação para Cliente",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "deploy-automation",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Deploy",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "deploy-automation"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Valida payload obrigatório\nconst { client_id, flow_id, automation_id } = $input.first().json.body || $input.first().json;\nif (!client_id || !flow_id || !automation_id) throw new Error('client_id, flow_id e automation_id são obrigatórios');\nreturn [{ json: { client_id, flow_id, automation_id } }];"
+      },
+      "id": "validate-input",
+      "name": "Validar Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://ckjiixentlgitwqoquzm.supabase.co/rest/v1/client_profiles?id=eq.{{ $json.client_id }}&select=empresa,whatsapp,api_keys,nicho",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+          ]
+        }
+      },
+      "id": "get-client",
+      "name": "Buscar Cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://ckjiixentlgitwqoquzm.supabase.co/rest/v1/fluxos_automacao?id=eq.{{ $('Validar Input').first().json.flow_id }}&select=titulo,template_key,api_keys_required",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+          ]
+        }
+      },
+      "id": "get-flow",
+      "name": "Buscar Flow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 500]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://ckjiixentlgitwqoquzm.supabase.co/rest/v1/provisioned_clients?select=domain,server_ip,evolution_api_key,n8n_api_key,status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "org_id",
+              "value": "=eq.{{ $('Buscar Cliente').first().json[0].empresa.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 30) }}"
+            }
+          ]
+        }
+      },
+      "id": "get-vps",
+      "name": "Buscar VPS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 700]
+    },
+    {
+      "parameters": {
+        "jsCode": "const client = $('Buscar Cliente').first().json[0];\nconst flow = $('Buscar Flow').first().json[0];\nconst vpsArr = $('Buscar VPS').first().json;\nconst vps = Array.isArray(vpsArr) ? vpsArr[0] : null;\nconst automation_id = $('Validar Input').first().json.automation_id;\n\n// Verificar se api_keys necessárias estão presentes\nconst required = flow.api_keys_required || [];\nconst api_keys = client.api_keys || {};\nconst missing = required.filter(k => !api_keys[k]);\n\nconst template_key = flow.template_key || 'custom';\nconst wa_instance = vps?.evolution_api_key ? `wa-${client.empresa?.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 15)}` : null;\n\nreturn [{\n  json: {\n    automation_id,\n    client_empresa: client.empresa,\n    client_whatsapp: client.whatsapp,\n    api_keys,\n    template_key,\n    flow_titulo: flow.titulo,\n    vps_domain: vps?.domain || null,\n    vps_n8n_api_key: vps?.n8n_api_key || null,\n    evolution_api_key: vps?.evolution_api_key || '0cd79bc805466a941edf91d0d60b1ede0f4f1b379e23915d',\n    wa_instance: wa_instance || 'wa-business-41984973849',\n    missing_keys: missing,\n    can_deploy: missing.length === 0 && template_key !== 'custom',\n    needs_manual: template_key === 'custom' || missing.length > 0\n  }\n}];"
+      },
+      "id": "build-context",
+      "name": "Montar Contexto Deploy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [{ "value1": "={{ $json.can_deploy }}", "value2": true }]
+        }
+      },
+      "id": "check-can-deploy",
+      "name": "Pode Fazer Deploy?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1120, 500]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://raw.githubusercontent.com/robsoncaldeira/automation_market_intelligence/main/graventum-core/arquitetura/templates/{{ $('Montar Contexto Deploy').first().json.template_key }}.json",
+        "options": {}
+      },
+      "id": "load-template",
+      "name": "Carregar Template",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Montar Contexto Deploy').first().json;\nconst templateStr = JSON.stringify($input.first().json);\n\n// Substituir variáveis no template\nconst populated = templateStr\n  .replace(/\\{\\{CLIENT_AUTOMATION_ID\\}\\}/g, ctx.automation_id)\n  .replace(/\\{\\{CLIENT_WA_INSTANCE\\}\\}/g, ctx.wa_instance)\n  .replace(/\\{\\{CLIENT_EVOLUTION_API_KEY\\}\\}/g, ctx.evolution_api_key);\n\nconst workflow = JSON.parse(populated);\nworkflow.name = `${ctx.client_empresa} — ${ctx.flow_titulo}`;\n\nreturn [{ json: workflow }];"
+      },
+      "id": "populate-template",
+      "name": "Popular Variáveis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://automation.graventum.com/api/v1/workflows",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-N8N-API-KEY", "value": "={{ $env.N8N_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "import-workflow",
+      "name": "Importar Workflow no n8n",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://automation.graventum.com/api/v1/workflows/{{ $json.id }}/activate",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-N8N-API-KEY", "value": "={{ $env.N8N_API_KEY }}" }
+          ]
+        }
+      },
+      "id": "activate-workflow",
+      "name": "Ativar Workflow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 400]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://ckjiixentlgitwqoquzm.supabase.co/rest/v1/client_automations?id=eq.{{ $('Montar Contexto Deploy').first().json.automation_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\"status\": \"ativo\", \"data_ativacao\": \"{{ new Date().toISOString() }}\", \"metricas\": {\"n8n_workflow_id\": \"{{ $('Ativar Workflow').first().json.id }}\", \"deploy_em\": \"{{ new Date().toISOString() }}\"}}"
+      },
+      "id": "mark-ativo",
+      "name": "Marcar como Ativo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 400]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=✅ Deploy automático concluído!\n\nCliente: {{ $('Montar Contexto Deploy').first().json.client_empresa }}\nAutomação: {{ $('Montar Contexto Deploy').first().json.flow_titulo }}\nTemplate: {{ $('Montar Contexto Deploy').first().json.template_key }}\nWorkflow ID: {{ $('Ativar Workflow').first().json.id }}",
+        "additionalFields": {}
+      },
+      "id": "notify-success",
+      "name": "Notificar Sucesso Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [2440, 400]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=⚠️ Deploy manual necessário!\n\nCliente: {{ $('Montar Contexto Deploy').first().json.client_empresa }}\nAutomação: {{ $('Montar Contexto Deploy').first().json.flow_titulo }}\nTemplate: {{ $('Montar Contexto Deploy').first().json.template_key }}\n\n{{ $json.needs_manual ? '❌ Template custom — implementar manualmente' : '' }}\n{{ $json.missing_keys.length > 0 ? '🔑 API keys faltando: ' + $json.missing_keys.join(', ') : '' }}\n\nAcesse: https://www.graventum.com/admin/clients/{{ $('Validar Input').first().json.client_id }}",
+        "additionalFields": {}
+      },
+      "id": "notify-manual",
+      "name": "Notificar Intervenção Manual",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [1340, 600]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": true, \"deployed\": {{ $('Pode Fazer Deploy?').first().json.can_deploy }}, \"automation_id\": \"{{ $('Validar Input').first().json.automation_id }}\" }"
+      },
+      "id": "respond",
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2440, 600]
+    }
+  ],
+  "connections": {
+    "Webhook Deploy": { "main": [[{ "node": "Validar Input", "type": "main", "index": 0 }]] },
+    "Validar Input": {
+      "main": [[
+        { "node": "Buscar Cliente", "type": "main", "index": 0 },
+        { "node": "Buscar Flow", "type": "main", "index": 0 },
+        { "node": "Buscar VPS", "type": "main", "index": 0 }
+      ]]
+    },
+    "Buscar Cliente": { "main": [[{ "node": "Montar Contexto Deploy", "type": "main", "index": 0 }]] },
+    "Buscar Flow": { "main": [[{ "node": "Montar Contexto Deploy", "type": "main", "index": 0 }]] },
+    "Buscar VPS": { "main": [[{ "node": "Montar Contexto Deploy", "type": "main", "index": 0 }]] },
+    "Montar Contexto Deploy": { "main": [[{ "node": "Pode Fazer Deploy?", "type": "main", "index": 0 }]] },
+    "Pode Fazer Deploy?": {
+      "main": [
+        [{ "node": "Carregar Template", "type": "main", "index": 0 }],
+        [{ "node": "Notificar Intervenção Manual", "type": "main", "index": 0 }]
+      ]
+    },
+    "Carregar Template": { "main": [[{ "node": "Popular Variáveis", "type": "main", "index": 0 }]] },
+    "Popular Variáveis": { "main": [[{ "node": "Importar Workflow no n8n", "type": "main", "index": 0 }]] },
+    "Importar Workflow no n8n": { "main": [[{ "node": "Ativar Workflow", "type": "main", "index": 0 }]] },
+    "Ativar Workflow": { "main": [[{ "node": "Marcar como Ativo", "type": "main", "index": 0 }]] },
+    "Marcar como Ativo": { "main": [[{ "node": "Notificar Sucesso Telegram", "type": "main", "index": 0 }]] },
+    "Notificar Sucesso Telegram": { "main": [[{ "node": "Responder", "type": "main", "index": 0 }]] },
+    "Notificar Intervenção Manual": { "main": [[{ "node": "Responder", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

@@ -1,0 +1,105 @@
+{
+  "name": "[[TEMPLATE]] Qualificação de Leads WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-{{CLIENT_AUTOMATION_ID}}",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Lead Recebido",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "lead-{{CLIENT_AUTOMATION_ID}}"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Valida e normaliza o payload do lead\nconst body = $input.first().json.body || $input.first().json;\nconst nome = body.nome || body.name || 'Lead';\nconst telefone = (body.telefone || body.phone || '').replace(/\\D/g, '');\nconst email = body.email || '';\nconst origem = body.origem || body.source || 'webhook';\n\nif (!telefone) throw new Error('Telefone obrigatório');\n\nreturn [{ json: { nome, telefone, email, origem, recebido_em: new Date().toISOString() } }];"
+      },
+      "id": "normalize-lead",
+      "name": "Normalizar Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://localhost:8081/message/sendText/{{CLIENT_WA_INSTANCE}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{CLIENT_EVOLUTION_API_KEY}}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "number", "value": "={{ $json.telefone }}" },
+            { "name": "text", "value": "=Olá {{ $json.nome }}! Recebemos seu contato. Para entendermos melhor como podemos ajudar, me conta: qual é o maior desafio que você enfrenta hoje no seu negócio?" }
+          ]
+        }
+      },
+      "id": "send-first-message",
+      "name": "Enviar Primeira Mensagem",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ckjiixentlgitwqoquzm.supabase.co/rest/v1/client_automations_leads",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={ \"automation_id\": \"{{CLIENT_AUTOMATION_ID}}\", \"nome\": \"{{ $('Normalizar Lead').first().json.nome }}\", \"telefone\": \"{{ $('Normalizar Lead').first().json.telefone }}\", \"email\": \"{{ $('Normalizar Lead').first().json.email }}\", \"origem\": \"{{ $('Normalizar Lead').first().json.origem }}\", \"status\": \"primeiro_contato\", \"criado_em\": \"{{ new Date().toISOString() }}\" }"
+      },
+      "id": "save-lead",
+      "name": "Salvar Lead no Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": true, \"lead\": \"{{ $('Normalizar Lead').first().json.nome }}\" }"
+      },
+      "id": "respond-webhook",
+      "name": "Responder Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Lead Recebido": { "main": [[{ "node": "Normalizar Lead", "type": "main", "index": 0 }]] },
+    "Normalizar Lead": { "main": [[{ "node": "Enviar Primeira Mensagem", "type": "main", "index": 0 }]] },
+    "Enviar Primeira Mensagem": { "main": [[{ "node": "Salvar Lead no Supabase", "type": "main", "index": 0 }]] },
+    "Salvar Lead no Supabase": { "main": [[{ "node": "Responder Webhook", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "_meta": {
+    "template_key": "qualificacao-leads-wa",
+    "description": "Recebe lead via webhook, envia mensagem de qualificação no WhatsApp e salva no Supabase. Webhook URL: /webhook/lead-{CLIENT_AUTOMATION_ID}",
+    "api_keys_required": [],
+    "variables": ["CLIENT_AUTOMATION_ID", "CLIENT_WA_INSTANCE", "CLIENT_EVOLUTION_API_KEY"],
+    "nota": "Tabela client_automations_leads precisa existir no Supabase para logging."
+  }
+}

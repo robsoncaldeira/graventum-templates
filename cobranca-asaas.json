@@ -1,0 +1,157 @@
+{
+  "name": "[[TEMPLATE]] Cobrança Asaas",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "days", "daysInterval": 1 }]
+        }
+      },
+      "id": "trigger-cron",
+      "name": "Cron Diário 9h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://ckjiixentlgitwqoquzm.supabase.co/rest/v1/client_automations",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "id", "value": "=eq.{{CLIENT_AUTOMATION_ID}}" },
+            { "name": "select", "value": "metricas,client_profiles(empresa,whatsapp,api_keys)" }
+          ]
+        }
+      },
+      "id": "get-client-config",
+      "name": "Buscar Config Cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.asaas.com/v3/payments?status=PENDING&dueDate[le]={{ new Date(Date.now() + 3*86400000).toISOString().split('T')[0] }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "access_token", "value": "={{ $('Buscar Config Cliente').first().json[0].client_profiles.api_keys.asaas_api_key }}" }
+          ]
+        }
+      },
+      "id": "get-pending-payments",
+      "name": "Buscar Cobranças Vencendo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const payments = $input.first().json.data || [];\nreturn payments\n  .filter(p => p.customer && p.value)\n  .map(p => ({\n    json: {\n      customer_id: p.customer,\n      value: p.value,\n      due_date: p.dueDate,\n      invoice_url: p.invoiceUrl,\n      bank_slip_url: p.bankSlipUrl,\n      nosso_numero: p.nossoNumero\n    }\n  }));"
+      },
+      "id": "filter-payments",
+      "name": "Formatar Cobranças",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.asaas.com/v3/customers/{{ $json.customer_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "access_token", "value": "={{ $('Buscar Config Cliente').first().json[0].client_profiles.api_keys.asaas_api_key }}" }
+          ]
+        }
+      },
+      "id": "get-customer",
+      "name": "Buscar Dados Cliente Asaas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://localhost:8081/message/sendText/{{CLIENT_WA_INSTANCE}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{CLIENT_EVOLUTION_API_KEY}}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "number", "value": "={{ $json.mobilePhone?.replace(/\\D/g, '') || $json.phone?.replace(/\\D/g, '') }}" },
+            { "name": "text", "value": "=Olá {{ $json.name }}, sua cobrança de R$ {{ $('Formatar Cobranças').first().json.value.toFixed(2) }} vence em {{ $('Formatar Cobranças').first().json.due_date }}. Link: {{ $('Formatar Cobranças').first().json.invoice_url }}" }
+          ]
+        }
+      },
+      "id": "send-whatsapp",
+      "name": "Enviar Lembrete WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://ckjiixentlgitwqoquzm.supabase.co/rest/v1/client_automations?id=eq.{{CLIENT_AUTOMATION_ID}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\"metricas\": {\"ultimo_envio\": \"{{ new Date().toISOString() }}\", \"cobr_processadas\": {{ $runIndex + 1 }}}}"
+      },
+      "id": "log-supabase",
+      "name": "Atualizar Métricas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "Cron Diário 9h": { "main": [[{ "node": "Buscar Config Cliente", "type": "main", "index": 0 }]] },
+    "Buscar Config Cliente": { "main": [[{ "node": "Buscar Cobranças Vencendo", "type": "main", "index": 0 }]] },
+    "Buscar Cobranças Vencendo": { "main": [[{ "node": "Formatar Cobranças", "type": "main", "index": 0 }]] },
+    "Formatar Cobranças": { "main": [[{ "node": "Buscar Dados Cliente Asaas", "type": "main", "index": 0 }]] },
+    "Buscar Dados Cliente Asaas": { "main": [[{ "node": "Enviar Lembrete WhatsApp", "type": "main", "index": 0 }]] },
+    "Enviar Lembrete WhatsApp": { "main": [[{ "node": "Atualizar Métricas", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "_meta": {
+    "template_key": "cobranca-asaas",
+    "description": "Busca cobranças vencendo em 3 dias no Asaas e envia lembrete via WhatsApp para cada devedor.",
+    "api_keys_required": ["asaas_api_key"],
+    "variables": ["CLIENT_AUTOMATION_ID", "CLIENT_WA_INSTANCE", "CLIENT_EVOLUTION_API_KEY"]
+  }
+}

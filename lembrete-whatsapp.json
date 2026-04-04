@@ -1,0 +1,137 @@
+{
+  "name": "[[TEMPLATE]] Lembrete WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 24 }]
+        }
+      },
+      "id": "trigger-cron",
+      "name": "Cron Diário 8h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://ckjiixentlgitwqoquzm.supabase.co/rest/v1/client_automations",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "id", "value": "=eq.{{CLIENT_AUTOMATION_ID}}" },
+            { "name": "select", "value": "metricas,client_profiles(empresa,whatsapp,api_keys)" }
+          ]
+        }
+      },
+      "id": "get-client-config",
+      "name": "Buscar Config Cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/{{ $json.client_profiles.api_keys.google_sheet_id }}/values/Lembretes!A:E",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.GOOGLE_API_TOKEN }}" }
+          ]
+        }
+      },
+      "id": "get-sheet-data",
+      "name": "Buscar Planilha",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Espera colunas: [nome, telefone, data_hora, tipo, mensagem]\nconst rows = $input.first().json.values || [];\nconst headers = rows[0];\nconst hoje = new Date();\nconst amanha = new Date(hoje); amanha.setDate(hoje.getDate() + 1);\n\nconst toSend = [];\nfor (const row of rows.slice(1)) {\n  const obj = {};\n  headers.forEach((h, i) => obj[h] = row[i]);\n  const dt = new Date(obj.data_hora);\n  const diffH = (dt - hoje) / 3600000;\n  if (diffH >= 0 && diffH <= 50) { // próximas 50h\n    toSend.push({\n      telefone: obj.telefone?.replace(/\\D/g, ''),\n      mensagem: obj.mensagem || `Olá ${obj.nome}, lembrete: ${obj.tipo} em ${dt.toLocaleString('pt-BR')}.`,\n      nome: obj.nome\n    });\n  }\n}\nreturn toSend.map(i => ({ json: i }));"
+      },
+      "id": "filter-lembretes",
+      "name": "Filtrar Próximos Lembretes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://localhost:8081/message/sendText/{{CLIENT_WA_INSTANCE}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{CLIENT_EVOLUTION_API_KEY}}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "number", "value": "={{ $json.telefone }}" },
+            { "name": "text", "value": "={{ $json.mensagem }}" }
+          ]
+        }
+      },
+      "id": "send-whatsapp",
+      "name": "Enviar WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://ckjiixentlgitwqoquzm.supabase.co/rest/v1/client_automations?id=eq.{{CLIENT_AUTOMATION_ID}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\"metricas\": {\"ultimo_envio\": \"{{ new Date().toISOString() }}\", \"total_enviados\": {{ $runIndex + 1 }}}}"
+      },
+      "id": "log-supabase",
+      "name": "Atualizar Métricas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "Cron Diário 8h": { "main": [[{ "node": "Buscar Config Cliente", "type": "main", "index": 0 }]] },
+    "Buscar Config Cliente": { "main": [[{ "node": "Buscar Planilha", "type": "main", "index": 0 }]] },
+    "Buscar Planilha": { "main": [[{ "node": "Filtrar Próximos Lembretes", "type": "main", "index": 0 }]] },
+    "Filtrar Próximos Lembretes": { "main": [[{ "node": "Enviar WhatsApp", "type": "main", "index": 0 }]] },
+    "Enviar WhatsApp": { "main": [[{ "node": "Atualizar Métricas", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "_meta": {
+    "template_key": "lembrete-whatsapp",
+    "description": "Lembretes automáticos via WhatsApp a partir de Google Sheet. Colunas: nome, telefone, data_hora, tipo, mensagem.",
+    "api_keys_required": ["google_sheet_id"],
+    "variables": ["CLIENT_AUTOMATION_ID", "CLIENT_WA_INSTANCE", "CLIENT_EVOLUTION_API_KEY"]
+  }
+}

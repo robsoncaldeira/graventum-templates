@@ -1,0 +1,148 @@
+{
+  "name": "[[TEMPLATE]] CONF_03 Cobrança Saldo em Aberto",
+  "nodes": [
+    {
+      "id": "cron-conf03",
+      "name": "Cron Diário 9h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "wh-conf03-cobranca",
+      "name": "Webhook Iniciar Cobrança",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        480
+      ],
+      "webhookId": "conf03-iniciar-cobranca",
+      "parameters": {
+        "path": "confeccao/iniciar-cobranca",
+        "httpMethod": "POST",
+        "responseMode": "onReceived"
+      }
+    },
+    {
+      "id": "code-conf03",
+      "name": "Preparar Cobranças",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        380
+      ],
+      "parameters": {
+        "jsCode": "// Este node recebe a lista de pedidos em aberto via webhook payload\n// ou pode ser integrado com o banco local da confecção\nconst b = $input.first().json.body || $input.first().json;\nconst pedidos = b.pedidos || [];\nconst automationId = '{{CLIENT_AUTOMATION_ID}}';\n\n// Filtra pedidos com saldo > 0 que já foram retirados (ou prazo passou)\nconst paraCobranca = pedidos.filter(p => {\n  const saldo = parseFloat(p.saldo_devedor || 0);\n  const diasAberto = p.dias_em_aberto || 0;\n  return saldo > 0 && diasAberto >= 1;\n});\n\nreturn paraCobranca.map(p => ({json: {\n  telefone: (p.cliente_telefone || '').replace(/\\D/g,''),\n  texto: `Olá, ${p.cliente_nome}! Lembramos que há um saldo de R$ ${parseFloat(p.saldo_devedor).toFixed(2)} em aberto referente ao serviço \"${p.tipo || 'serviço'}\". Quando puder, acerte conosco! 😊`,\n  waUrl: `http://evolution_api:8080/message/sendText/{{CLIENT_WA_INSTANCE}}`,\n  waKey: '{{CLIENT_EVOLUTION_API_KEY}}',\n  automationId\n}}));"
+      }
+    },
+    {
+      "id": "http-wa-conf03",
+      "name": "Enviar WA Cobrança",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        380
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.waUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $json.waKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {number: $json.telefone, text: $json.texto, delay: 2000} }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "code-metrics-conf03",
+      "name": "Registrar Histórico",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        380
+      ],
+      "parameters": {
+        "jsCode": "return [{json: {\n  automation_id: '{{CLIENT_AUTOMATION_ID}}',\n  metric_key: 'cobranças_enviadas',\n  metric_value: $input.all().length,\n  metadata: {timestamp: new Date().toISOString()}\n}}];"
+      }
+    }
+  ],
+  "connections": {
+    "Cron Diário 9h": {
+      "main": [
+        [
+          {
+            "node": "Preparar Cobranças",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Iniciar Cobrança": {
+      "main": [
+        [
+          {
+            "node": "Preparar Cobranças",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Cobranças": {
+      "main": [
+        [
+          {
+            "node": "Enviar WA Cobrança",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar WA Cobrança": {
+      "main": [
+        [
+          {
+            "node": "Registrar Histórico",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null
+}

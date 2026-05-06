@@ -1,0 +1,117 @@
+{
+  "name": "[[TEMPLATE]] CONF_01 Registro Pedido — Confirmação WA",
+  "nodes": [
+    {
+      "id": "wh-conf01",
+      "name": "Webhook Novo Pedido",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "conf01-novo-pedido",
+      "parameters": {
+        "path": "confeccao/novo-pedido",
+        "httpMethod": "POST",
+        "responseMode": "onReceived"
+      }
+    },
+    {
+      "id": "code-conf01",
+      "name": "Preparar Mensagem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nconst nome = b.cliente_nome || 'Cliente';\nconst tipo = b.tipo || 'serviço';\nconst prazo = b.prazo_prometido || 'a combinar';\nconst valorTotal = b.valor_total ? `R$ ${parseFloat(b.valor_total).toFixed(2)}` : '';\nconst valorEntrada = b.valor_entrada ? `\\nEntrada recebida: R$ ${parseFloat(b.valor_entrada).toFixed(2)}` : '';\nconst telefone = (b.cliente_telefone || '').replace(/\\D/g,'');\nconst automationId = '{{CLIENT_AUTOMATION_ID}}';\n\nconst texto = `Olá, ${nome}! Seu pedido foi registrado com sucesso.\\n\\nServiço: ${tipo}\\nPrazo combinado: ${prazo}${valorTotal ? '\\nValor total: '+valorTotal : ''}${valorEntrada}\\n\\nQualquer dúvida é só chamar!`;\n\nreturn [{json: {\n  telefone,\n  texto,\n  waInstance: '{{CLIENT_WA_INSTANCE}}',\n  automationId,\n  waUrl: `http://evolution_api:8080/message/sendText/{{CLIENT_WA_INSTANCE}}`,\n  waKey: '{{CLIENT_EVOLUTION_API_KEY}}'\n}}];"
+      }
+    },
+    {
+      "id": "http-wa-conf01",
+      "name": "Enviar WA Confirmação",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.waUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $json.waKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {number: $json.telefone, text: $json.texto, delay: 1000} }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "code-metrics-conf01",
+      "name": "Registrar Histórico",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Registra métrica de execução — alimenta dashboard do portal\nconst automationId = $('Preparar Mensagem').first().json.automationId;\nif (!automationId) return $input.all();\n\n// Métricas registradas no Supabase Graventum\nreturn [{json: {\n  automation_id: automationId,\n  metric_key: 'pedidos_confirmados',\n  metric_value: 1,\n  metadata: {timestamp: new Date().toISOString()}\n}}];"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Novo Pedido": {
+      "main": [
+        [
+          {
+            "node": "Preparar Mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Mensagem": {
+      "main": [
+        [
+          {
+            "node": "Enviar WA Confirmação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar WA Confirmação": {
+      "main": [
+        [
+          {
+            "node": "Registrar Histórico",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null
+}
